@@ -1,0 +1,27 @@
+definition_version: 2
+entities:
+  streamlit_app:
+    type: streamlit
+    identifier:
+      database: UTIL_DB
+      schema: STREAMLIT
+      name: COST_SUMMARY
+    title: Cost Summary
+    query_warehouse: ADMIN_WH
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    run_mode: SpcsOnly
+    execute_as: OWNER
+    main_file: cost_summary.py
+    artifacts:
+      - pyproject.toml
+      - cost_summary.py
+      - .streamlit/config.toml
+      - config.json
+    idle_auto_shutdown_time_seconds: 86400
+    schedules:
+      cron_exprs:
+        - 0 8 * * 1,2,3,4,5
+      timezone: America/New_York
+    sharing:
+      - role: SYSADMIN
+        with_grant_option: true
