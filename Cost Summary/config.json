@@ -1,0 +1,6 @@
+{
+  "contract_start": "2026-01-01",
+  "annual_capacity": 100000,
+  "credit_rate": 4.00,
+  "credit_rate_label": "Business Critical"
+}
