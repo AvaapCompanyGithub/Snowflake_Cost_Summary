@@ -11,6 +11,7 @@ import decimal
 
 import streamlit as st
 import pandas as pd
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 import math
@@ -104,6 +105,7 @@ credit_price = float(_cfg["credit_rate"])
 rate_choice = str(_cfg.get("credit_rate_label", "") or "Configured rate")
 if credit_price <= 0:
     rate_choice = "Credits only"
+date_range = str(_cfg.get("default_date_range", "TODAY")).upper()
 
 # ----------------------------------------------------------------------
 # Colors
@@ -283,7 +285,6 @@ except Exception:
 # Page Header
 # ----------------------------------------------------------------------
 
-# Dropdown label -> short code used on the Total card
 DATE_PRESET_MAP = {
     "Today": "TODAY",
     "Week to Date": "WTD",
@@ -291,10 +292,42 @@ DATE_PRESET_MAP = {
     "Quarter to Date": "QTD",
     "Year to Date": "YTD",
 }
-DATE_PRESETS = list(DATE_PRESET_MAP.keys())
+DATE_PRESETS = list(DATE_PRESET_MAP.keys()) + ["Custom"]
+LABEL_BY_CODE = {code: label for label, code in DATE_PRESET_MAP.items()}
+
+def dates_for(code, today):
+    if code == "TODAY":
+        return today, today
+    if code == "WTD":
+        return today - timedelta(days=today.weekday()), today
+    if code == "MTD":
+        return today.replace(day=1), today
+    if code == "QTD":
+        month = ((today.month - 1) // 3) * 3 + 1
+        return today.replace(month=month, day=1), today
+    return today.replace(month=1, day=1), today
+
+def on_range_change():
+    preset = DATE_PRESET_MAP.get(st.session_state.get("date_preset"), "CUSTOM")
+    key = "calendar_custom" if preset == "CUSTOM" else f"calendar_{preset}"
+    picked = st.session_state.get(key)
+    if not (isinstance(picked, (tuple, list)) and len(picked) == 2):
+        for candidate in list(st.session_state.keys()):
+            if str(candidate).startswith("calendar_"):
+                value = st.session_state[candidate]
+                if isinstance(value, (tuple, list)) and len(value) == 2:
+                    picked = value
+                    break
+    if isinstance(picked, (tuple, list)) and len(picked) == 2:
+        st.session_state.custom_range = tuple(picked)
+    st.session_state.date_preset = "Custom"
 
 if "last_refreshed" not in st.session_state:
     st.session_state.last_refreshed = datetime.now()
+if "date_preset" not in st.session_state:
+    st.session_state.date_preset = LABEL_BY_CODE[date_range]
+if "custom_range" not in st.session_state:
+    st.session_state.custom_range = dates_for(date_range, datetime.now().date())
 
 title_col, range_col = st.columns([3.2, 1.3])
 with title_col:
@@ -306,49 +339,54 @@ with title_col:
         f"Last refreshed: {st.session_state.last_refreshed.strftime('%Y-%m-%d %H:%M:%S')}</div>",
         unsafe_allow_html=True,
     )
-with range_col:
-    preset_label = st.selectbox(
-        "Date Range",
-        DATE_PRESETS,
-        index=DATE_PRESETS.index("Year to Date"),
-    )
-    preset = DATE_PRESET_MAP[preset_label]
 
 today = datetime.now().date()
-if preset == "TODAY":
-    start_date = today
-    end_date = today
-elif preset == "WTD":
-    start_date = today - timedelta(days=today.weekday())  # Monday
-    end_date = today
-elif preset == "MTD":
-    start_date = today.replace(day=1)
-    end_date = today
-elif preset == "QTD":
-    quarter_start_month = ((today.month - 1) // 3) * 3 + 1
-    start_date = today.replace(month=quarter_start_month, day=1)
-    end_date = today
-else:  # YTD
-    start_date = today.replace(month=1, day=1)
-    end_date = today
+preset = DATE_PRESET_MAP.get(st.session_state.get("date_preset", "Year to Date"), "CUSTOM")
+
+with range_col:
+    st.selectbox("Date Range", DATE_PRESETS, key="date_preset")
+    if preset == "CUSTOM":
+        st.date_input(
+            "Custom range",
+            key="calendar_custom",
+            value=st.session_state.custom_range,
+            max_value=today,
+            format="YYYY-MM-DD",
+            label_visibility="collapsed",
+            on_change=on_range_change,
+        )
+        picked = st.session_state.calendar_custom
+    else:
+        forced = dates_for(preset, today)
+        st.date_input(
+            "Custom range",
+            key=f"calendar_{preset}",
+            value=forced,
+            max_value=today,
+            format="YYYY-MM-DD",
+            label_visibility="collapsed",
+            on_change=on_range_change,
+        )
+        picked = forced
+
+if isinstance(picked, (tuple, list)) and len(picked) == 2:
+    start_date, end_date = picked
+else:
+    start_date = end_date = today
 
 with range_col:
     st.markdown(
         f'<div style="color:{MUTED};font-size:0.72rem;margin-top:-0.35rem;">'
-        f'{start_date.strftime("%b %d, %Y")} → {end_date.strftime("%b %d, %Y")}'
+        f'{start_date.strftime("%Y-%m-%d")} → {end_date.strftime("%Y-%m-%d")}'
         f'</div>',
         unsafe_allow_html=True,
     )
 
 st.markdown("---")
 
-start_ts = start_date.strftime("%Y-%m-%d")
-end_ts = end_date.strftime("%Y-%m-%d")
-
 # ACCOUNT_USAGE ranges are half-open; end bound is exclusive.
-p_start = start_ts
+p_start = start_date.strftime("%Y-%m-%d")
 p_end = (end_date + timedelta(days=1)).isoformat()
-
 
 # ----------------------------------------------------------------------
 # Queries
