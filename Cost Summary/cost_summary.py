@@ -2,7 +2,7 @@
 Snowflake Cost Summary
 
 Requires the app owner role to hold IMPORTED PRIVILEGES on database SNOWFLAKE.
-Uses only packages bundled with Streamlit in Snowflake — no extra packages needed.
+Uses only packages bundled with Streamlit in Snowflake - no extra packages needed.
 """
 
 import calendar
@@ -105,6 +105,15 @@ credit_price = float(_cfg["credit_rate"])
 rate_choice = str(_cfg.get("credit_rate_label", "") or "Configured rate")
 if credit_price <= 0:
     rate_choice = "Credits only"
+
+# Rate / capacity note (matches selected credit rate)
+if credit_price <= 0 or rate_choice == "Credits only":
+    rate_note = "Dollar figures suppressed. All values reported in credits."
+else:
+    rate_note = (
+        f"${credit_price:,.2f} per credit - configured rate for {rate_choice} Edition."
+    )
+
 date_range = str(_cfg.get("default_date_range", "TODAY")).upper()
 
 # ----------------------------------------------------------------------
@@ -239,7 +248,6 @@ st.markdown(
         padding-top: 0.2rem !important;
         padding-bottom: 0.2rem !important;
       }}
-
       /* Denser stacked bars (Vega / native chart) */
       .stVegaLiteChart svg g.mark-rect > path,
       .stVegaLiteChart svg rect {{ }}
@@ -333,8 +341,8 @@ title_col, range_col = st.columns([3.2, 1.3])
 with title_col:
     st.markdown(
         f'<div class="masthead">{_logo_html}<h1>Cost Summary</h1></div>'
-        '<div class="subhead">High-level financial overview of compute, storage, '
-        "and serverless consumption.</div>"
+        f'<div class="subhead">High-level financial overview of compute, storage, and serverless consumption.</div>'
+        f'<div class="subhead">{rate_note}</div>'
         f'<div style="color:{MUTED};font-size:.72rem;margin:-0.35rem 0 0.15rem 0;">'
         f"Last refreshed: {st.session_state.last_refreshed.strftime('%Y-%m-%d %H:%M:%S')}</div>",
         unsafe_allow_html=True,
@@ -382,7 +390,7 @@ with range_col:
         unsafe_allow_html=True,
     )
 
-st.markdown("---")
+st.divider()
 
 # ACCOUNT_USAGE ranges are half-open; end bound is exclusive.
 p_start = start_date.strftime("%Y-%m-%d")
@@ -775,6 +783,13 @@ else:
          "foot": [f"{xfer_routes} route(s)"], "primary": False},
     ]
 
+st.markdown(
+    f'<div style="color:{MUTED};font-size:0.72rem;margin:-1rem 0 0 0;padding:0 0 0.65rem 0;">'
+    f'Change vs prior period ({preset}).'
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
 k = st.columns(7)
 for col, c in zip(k, cards):
     with col:
@@ -796,25 +811,15 @@ if credit_price > 0 and remaining is not None:
         f'{money(remaining)} left of {money(annual_budget)}'
         f' · {budget_pct * 100:.1f}% used since {contract_label}'
     )
-_eq = "Warehouse + Serverless + AI services + Cloud services billed = Total credits"
 st.markdown(
-    f'<div style="display:flex;align-items:center;justify-content:space-between;'
-    f'gap:1rem;margin:0.4rem 0.15rem 0.3rem 0.15rem;flex-wrap:wrap;">'
-    f'<div style="color:{MUTED};font-size:0.72rem;flex:1 1 auto;">{_cap}</div>'
-    f'<div style="color:{MUTED};font-size:0.72rem;flex:1 1 auto;text-align:center;">'
-    f'{_eq}</div>'
-    f'<div style="flex:1 1 auto;"></div>'
-    f'</div>',
+    f'<div style="color:{MUTED};font-size:0.72rem;margin:0 0 -0.85rem 0;padding:0.75rem 0 0 0;">{_cap}</div>',
     unsafe_allow_html=True,
 )
-
 st.divider()
-
-
 
 # ----------------------------------------------------------------------
 # Charts: stacked credits, warehouse table, spend mix
-# (Streamlit native charts only — no plotly/matplotlib)
+# (Streamlit native charts only - no plotly/matplotlib)
 # ----------------------------------------------------------------------
 
 # Build daily series for stacked bar
@@ -983,7 +988,7 @@ with mix_col:
         center = money(total_val) if credit_price > 0 else f"{total_val:,.1f}"
         center_sub = "spend" if credit_price > 0 else "credits"
 
-        # Pure SVG donut — no extra packages
+        # Pure SVG donut - no extra packages
         colors = DONUT_COLORS
         values = mix[value_col].tolist()
         labels = mix["Warehouse Name"].tolist()
@@ -1056,37 +1061,25 @@ with mix_col:
         )
         st.markdown(svg, unsafe_allow_html=True)
 
-st.markdown("---")
-
-# Rate / capacity note (matches selected credit rate)
-if credit_price <= 0 or rate_choice == "Credits only":
-    rate_note = "Dollar figures suppressed. All values reported in credits."
-else:
-    rate_note = (
-        f"${credit_price:,.2f} per credit — configured rate for {rate_choice}. "
-        "Actual rates vary by cloud and region, and contracted rates may differ. "
-        "Treat dollar figures as indicative. Capacity remaining is measured from the "
-        "current contract anniversary through today, independent of the date range above."
-    )
-
 # -------------------------------------------------
 # Notes
 # -------------------------------------------------
 
-st.markdown("---")
+st.divider()
 
 st.markdown(
     f"""
     <div class="note">
-    {rate_note}<br><br>
-    Change vs prior period ({preset}).
+    Actual rates vary by cloud and region, and contracted rates may differ.
+    Treat dollar figures as indicative. Capacity remaining is measured from the
+    current contract anniversary through today, independent of the date range above.<br><br>
     ACCOUNT_USAGE views are not real time. Metering and storage lag by roughly
     2 to 3 hours, query attribution by up to 8 hours, and Cortex function usage
     by about 5 minutes. Ranges that include today or yesterday will therefore
     understate actual consumption, and the most recent day is always partial.<br><br>
     Storage and data transfer bill in dollars per terabyte, not credits, so
     neither is included in Total credits / Total Spend.
-    Figures are drawn from ACCOUNT_USAGE and are for internal analysis only —
+    Figures are drawn from ACCOUNT_USAGE and are for internal analysis only -
     they will not tie exactly to your Snowflake invoice. Use ORGANIZATION_USAGE
     or the billing statement for figures of record.
     </div>
